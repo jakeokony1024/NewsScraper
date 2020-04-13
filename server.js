@@ -4,6 +4,7 @@ const exphbs = require("express-handlebars");
 const axios = require("axios");
 const cheerio = require("cheerio");
 
+
 // Require all models
 const db = require("./models");
 
@@ -11,6 +12,11 @@ const PORT = 3000;
 
 // Initialize Express
 const app = express();
+
+//connect to mongodb mLabs
+const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost/newsScraper";
+
+mongoose.connect(MONGODB_URI);
 
 // Configure middleware
 
@@ -43,7 +49,9 @@ app.get("/scrape", function (req, res) {
     // First, we grab the body of the html with axios
     axios.get("http://www.echojs.com/").then(function (response) {
         // Then, we load that into cheerio and save it to $ for a shorthand selector
-        var $ = cheerio.load(response.data);
+        const $ = cheerio.load(response.data);
+        let titlesArray = [];
+
 
         // Now, we grab every h2 within an article tag, and do the following:
         $("article h2").each(function (i, element) {
@@ -57,7 +65,28 @@ app.get("/scrape", function (req, res) {
             result.link = $(this)
                 .children("a")
                 .attr("href");
+            if (result.title !== "" && result.link !== ""){
+                if (titlesArray.indexOf(result.title) == -1){
+                    titlesArray.push(result.title); 
 
+                    db.Article.count({title: result.title}, function(err, test){
+                        if (test === 0){
+                            let entry = new Article(result);
+                            entry.save(function(err, doc){
+                                if (err) {
+                                    console.log(err)
+                                } else {
+                                    console.log(doc)
+                                }
+                            })
+                        }
+                    })
+                } else {
+                    console.log("Article Aready Exsists");
+                }
+            } else {
+                console.log("Not saved to DB, missing data.");
+            }
             // Create a new Article using the `result` object built from scraping
             db.Article.create(result)
                 .then(function (dbArticle) {
